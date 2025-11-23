@@ -8,6 +8,7 @@ import androidlead.weatherappui.ui.theme.ColorImageShadow
 import androidlead.weatherappui.ui.theme.ColorSurface
 import androidlead.weatherappui.ui.theme.ColorTextPrimary
 import androidlead.weatherappui.ui.theme.ColorTextSecondary
+import androidx.compose.animation.Crossfade
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -23,11 +24,21 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -39,8 +50,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 
 @Composable
@@ -49,7 +62,12 @@ fun ActionBar(
     location: String = "Rome",
     updatedText: String = "Updating •",
     onLocationClick: () -> Unit,
-    onSettingsClick: () -> Unit = {}
+    onSettingsClick: () -> Unit = {},
+    isSearching: Boolean = false,
+    searchText: String = "",
+    onSearchTextChange: (String) -> Unit = {},
+    onSearch: (String) -> Unit = {},
+    onCancelSearch: () -> Unit = {}
 ) {
     Row(
         modifier = modifier.fillMaxWidth(),
@@ -57,13 +75,103 @@ fun ActionBar(
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
         ControlButton(onSettingsClick = onSettingsClick)
-        LocationInfo(
-            modifier = Modifier.padding(top = 10.dp),
-            location = location,
-            updatedText = updatedText,
-            onLocationClick = onLocationClick
-        )
+        
+        Crossfade(
+            targetState = isSearching,
+            modifier = Modifier
+                .weight(1f)
+                .padding(horizontal = 8.dp),
+            label = "search_transition"
+        ) { searching ->
+            if (searching) {
+                SearchBar(
+                    modifier = Modifier.fillMaxWidth(),
+                    searchText = searchText,
+                    onSearchTextChange = onSearchTextChange,
+                    onSearch = { onSearch(searchText) },
+                    onCancel = onCancelSearch
+                )
+            } else {
+                Box(
+                    modifier = Modifier.fillMaxWidth(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    LocationInfo(
+                        modifier = Modifier.padding(top = 10.dp),
+                        location = location,
+                        updatedText = updatedText,
+                        onLocationClick = onLocationClick
+                    )
+                }
+            }
+        }
+        
         ProfileButton()
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SearchBar(
+    modifier: Modifier = Modifier,
+    searchText: String,
+    onSearchTextChange: (String) -> Unit,
+    onSearch: () -> Unit,
+    onCancel: () -> Unit
+) {
+    val focusManager = LocalFocusManager.current
+    
+    Box(modifier = modifier) {
+        TextField(
+            value = searchText,
+            onValueChange = onSearchTextChange,
+            placeholder = { 
+                Text(
+                    "Search city...", 
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = ColorTextSecondary
+                ) 
+            },
+            singleLine = true,
+            textStyle = MaterialTheme.typography.bodyMedium,
+            colors = TextFieldDefaults.colors(
+                focusedContainerColor = ColorSurface,
+                unfocusedContainerColor = ColorSurface,
+                disabledContainerColor = ColorSurface,
+                focusedIndicatorColor = Color.Transparent,
+                unfocusedIndicatorColor = Color.Transparent,
+                disabledIndicatorColor = Color.Transparent,
+                focusedTextColor = ColorTextPrimary,
+                unfocusedTextColor = ColorTextPrimary,
+                cursorColor = ColorTextPrimary
+            ),
+            shape = RoundedCornerShape(16.dp),
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+            keyboardActions = KeyboardActions(onSearch = {
+                onSearch()
+                focusManager.clearFocus()
+            }),
+            trailingIcon = {
+                if (searchText.isNotEmpty()) {
+                    IconButton(onClick = { onSearchTextChange("") }) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "Clear",
+                            tint = ColorTextSecondary
+                        )
+                    }
+                } else {
+                    IconButton(onClick = onCancel) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "Cancel",
+                            tint = ColorTextSecondary
+                        )
+                    }
+                }
+            },
+            modifier = Modifier.fillMaxWidth().height(56.dp)
+        )
     }
 }
 

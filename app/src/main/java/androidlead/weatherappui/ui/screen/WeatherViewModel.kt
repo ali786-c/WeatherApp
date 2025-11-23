@@ -2,6 +2,7 @@ package androidlead.weatherappui.ui.screen
 
 import androidlead.weatherappui.R
 import androidlead.weatherappui.data.model.City
+import androidlead.weatherappui.data.model.GeoLocation
 import androidlead.weatherappui.data.model.Main
 import androidlead.weatherappui.data.model.Weather
 import androidlead.weatherappui.data.model.WeatherData
@@ -12,6 +13,7 @@ import androidlead.weatherappui.ui.screen.util.AirQualityItem
 import androidlead.weatherappui.ui.screen.util.ForecastItem
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -31,20 +33,13 @@ class WeatherViewModel : ViewModel() {
 
     // OpenWeather API Key
     private val apiKey = "94656f8ac592f27c36b009927eba16de"
+    
+    private var searchJob: Job? = null
 
     fun fetchWeather(city: String) {
         viewModelScope.launch {
-            _weatherState.update { it.copy(isLoading = true, error = null) }
+            _weatherState.update { it.copy(isLoading = true, error = null, searchSuggestions = emptyList()) }
             
-            /*
-            // --- MOCK DATA (FOR TESTING) ---
-            delay(3000) // Increased delay to 3 seconds so Splash Screen is visible
-            updateStateWithResponse(getMockData())
-            return@launch
-            // -------------------------------
-            */
-            
-            // ORIGINAL API LOGIC (Restored)
             try {
                 val response = RetrofitClient.instance.getForecast(city, apiKey)
                 updateStateWithResponse(response)
@@ -58,17 +53,8 @@ class WeatherViewModel : ViewModel() {
 
     fun fetchWeatherByLocation(lat: Double, lon: Double) {
         viewModelScope.launch {
-            _weatherState.update { it.copy(isLoading = true, error = null) }
-            
-            /*
-            // --- MOCK DATA (FOR TESTING) ---
-            delay(3000) // Increased delay to 3 seconds so Splash Screen is visible
-            updateStateWithResponse(getMockData())
-            return@launch
-            // -------------------------------
-            */
+            _weatherState.update { it.copy(isLoading = true, error = null, searchSuggestions = emptyList()) }
 
-            // ORIGINAL API LOGIC (Restored)
             try {
                 val response = RetrofitClient.instance.getForecastByCoordinates(lat, lon, apiKey)
                 updateStateWithResponse(response)
@@ -78,6 +64,29 @@ class WeatherViewModel : ViewModel() {
                 _weatherState.update { it.copy(isLoading = false, error = e.message ?: "Unknown error") }
             }
         }
+    }
+    
+    fun searchCities(query: String) {
+        searchJob?.cancel()
+        if (query.length < 3) {
+            _weatherState.update { it.copy(searchSuggestions = emptyList()) }
+            return
+        }
+        
+        searchJob = viewModelScope.launch {
+            delay(500) // Debounce
+            try {
+                val suggestions = RetrofitClient.instance.searchCities(query, apiKey = apiKey)
+                _weatherState.update { it.copy(searchSuggestions = suggestions) }
+            } catch (e: Exception) {
+                // Ignore search errors for now or log them
+                e.printStackTrace()
+            }
+        }
+    }
+    
+    fun clearSuggestions() {
+        _weatherState.update { it.copy(searchSuggestions = emptyList()) }
     }
 
     private fun getMockData(): WeatherResponse {
@@ -225,5 +234,6 @@ data class WeatherUiState(
     val weatherData: WeatherResponse? = null,
     val forecastItems: List<ForecastItem> = emptyList(),
     val airQualityItems: List<AirQualityItem> = emptyList(),
+    val searchSuggestions: List<GeoLocation> = emptyList(),
     val error: String? = null
 )

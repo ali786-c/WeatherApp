@@ -23,6 +23,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -33,6 +34,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -61,11 +64,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.launch
@@ -78,10 +83,13 @@ fun WeatherScreen(
     viewModel: WeatherViewModel = viewModel()
 ) {
     val weatherState by viewModel.weatherState.collectAsState()
-    var showDialog by remember { mutableStateOf(false) }
     var showApiErrorDialog by remember { mutableStateOf(false) }
     var isFahrenheit by remember { mutableStateOf(false) }
     var isAboutExpanded by remember { mutableStateOf(false) }
+    
+    // Search state
+    var isSearching by remember { mutableStateOf(false) }
+    var searchText by remember { mutableStateOf("") }
     
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
@@ -91,16 +99,6 @@ fun WeatherScreen(
         if (weatherState.error != null && !weatherState.isLoading) {
             showApiErrorDialog = true
         }
-    }
-
-    if (showDialog) {
-        CitySelectionDialog(
-            onDismiss = { showDialog = false },
-            onCitySelected = { city ->
-                viewModel.fetchWeather(city)
-                showDialog = false
-            }
-        )
     }
 
     if (showApiErrorDialog && weatherState.error != null) {
@@ -116,7 +114,7 @@ fun WeatherScreen(
                     onClick = { 
                         showApiErrorDialog = false 
                         viewModel.clearError()
-                        showDialog = true // Re-open search on error so user can try again
+                        isSearching = true // Open search on error so user can try again
                     }
                 ) {
                     Text("Try Again")
@@ -234,15 +232,86 @@ fun WeatherScreen(
                         weatherData = weatherState.weatherData!!,
                         forecastItems = weatherState.forecastItems,
                         airQualityItems = weatherState.airQualityItems,
-                        onLocationClick = { showDialog = true },
+                        onLocationClick = { isSearching = true },
                         onRefresh = {
                             viewModel.fetchWeather(weatherState.weatherData!!.city.name)
                         },
                         onSettingsClick = { 
                             scope.launch { drawerState.open() }
                         },
-                        isFahrenheit = isFahrenheit
+                        isFahrenheit = isFahrenheit,
+                        isSearching = isSearching,
+                        searchText = searchText,
+                        onSearchTextChange = { 
+                            searchText = it
+                            viewModel.searchCities(it)
+                        },
+                        onSearch = { 
+                            viewModel.fetchWeather(it)
+                            isSearching = false
+                            searchText = ""
+                            viewModel.clearSuggestions()
+                        },
+                        onCancelSearch = {
+                            isSearching = false
+                            searchText = ""
+                            viewModel.clearSuggestions()
+                        }
                     )
+                }
+
+                // Scrim to dismiss search on outside click
+                if (isSearching) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(top = 70.dp) // Adjust top padding based on ActionBar height
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null
+                            ) {
+                                isSearching = false
+                                searchText = ""
+                                viewModel.clearSuggestions()
+                            }
+                    )
+                }
+
+                // Search Suggestions Overlay
+                if (isSearching && weatherState.searchSuggestions.isNotEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 70.dp, start = 16.dp, end = 16.dp) // Adjust top padding based on ActionBar height
+                    ) {
+                        LazyColumn(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .shadow(8.dp, RoundedCornerShape(8.dp))
+                                .background(ColorSurface, RoundedCornerShape(8.dp))
+                        ) {
+                            items(weatherState.searchSuggestions) { location ->
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable {
+                                            viewModel.fetchWeatherByLocation(location.lat, location.lon)
+                                            isSearching = false
+                                            searchText = ""
+                                            viewModel.clearSuggestions()
+                                        }
+                                        .padding(16.dp)
+                                ) {
+                                    Text(
+                                        text = "${location.name}, ${location.country}",
+                                        color = ColorTextPrimary,
+                                        style = MaterialTheme.typography.bodyLarge
+                                    )
+                                }
+                                Divider(color = ColorTextSecondary.copy(alpha = 0.1f))
+                            }
+                        }
+                    }
                 }
 
                 // Loading Indicator (Overlay)
@@ -275,7 +344,7 @@ fun WeatherScreen(
                             style = MaterialTheme.typography.bodyLarge,
                             modifier = Modifier.padding(16.dp)
                         )
-                        Button(onClick = { showDialog = true }) {
+                        Button(onClick = { isSearching = true }) {
                             Text("Search Again")
                         }
                     }
@@ -314,7 +383,12 @@ fun WeatherContent(
     onLocationClick: () -> Unit,
     onRefresh: () -> Unit,
     onSettingsClick: () -> Unit,
-    isFahrenheit: Boolean
+    isFahrenheit: Boolean,
+    isSearching: Boolean,
+    searchText: String,
+    onSearchTextChange: (String) -> Unit,
+    onSearch: (String) -> Unit,
+    onCancelSearch: () -> Unit
 ) {
     Column(
         modifier = Modifier
@@ -346,7 +420,12 @@ fun WeatherContent(
             location = weatherData.city.name,
             updatedText = formattedDate,
             onLocationClick = onLocationClick,
-            onSettingsClick = onSettingsClick
+            onSettingsClick = onSettingsClick,
+            isSearching = isSearching,
+            searchText = searchText,
+            onSearchTextChange = onSearchTextChange,
+            onSearch = onSearch,
+            onCancelSearch = onCancelSearch
         )
         Spacer(
             modifier = Modifier.height(12.dp)
