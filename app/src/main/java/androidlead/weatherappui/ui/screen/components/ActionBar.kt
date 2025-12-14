@@ -63,6 +63,7 @@ fun ActionBar(
     updatedText: String = "Updating •",
     onLocationClick: () -> Unit,
     onSettingsClick: () -> Unit = {},
+    onProfileClick: () -> Unit = {},
     isSearching: Boolean = false,
     searchText: String = "",
     onSearchTextChange: (String) -> Unit = {},
@@ -106,10 +107,42 @@ fun ActionBar(
             }
         }
         
-        ProfileButton()
+        ProfileButton(onProfileClick = onProfileClick)
     }
 }
 
+
+@Composable
+private fun ProfileButton(
+    modifier: Modifier = Modifier,
+    onProfileClick: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .size(48.dp)
+            .border(
+                width = 1.5.dp,
+                color = ColorSurface,
+                shape = CircleShape
+            )
+            .customShadow(
+                color = ColorImageShadow,
+                alpha = 0.7f,
+                shadowRadius = 12.dp,
+                borderRadius = 48.dp,
+                offsetY = 6.dp
+            )
+            .clickable { onProfileClick() }
+    ) {
+        Image(
+            painter = painterResource(id = R.drawable.img_profile),
+            contentDescription = null,
+            modifier = modifier
+                .fillMaxSize()
+                .clip(CircleShape)
+        )
+    }
+}
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun SearchBar(
@@ -207,35 +240,7 @@ private fun ControlButton(
     }
 }
 
-@Composable
-private fun ProfileButton(
-    modifier: Modifier = Modifier
-) {
-    Box(
-        modifier = Modifier
-            .size(48.dp)
-            .border(
-                width = 1.5.dp,
-                color = ColorSurface,
-                shape = CircleShape
-            )
-            .customShadow(
-                color = ColorImageShadow,
-                alpha = 0.7f,
-                shadowRadius = 12.dp,
-                borderRadius = 48.dp,
-                offsetY = 6.dp
-            )
-    ) {
-        Image(
-            painter = painterResource(id = R.drawable.img_profile),
-            contentDescription = null,
-            modifier = modifier
-                .fillMaxSize()
-                .clip(CircleShape)
-        )
-    }
-}
+
 
 @Composable
 private fun LocationInfo(

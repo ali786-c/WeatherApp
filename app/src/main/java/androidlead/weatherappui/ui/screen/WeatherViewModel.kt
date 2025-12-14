@@ -27,12 +27,24 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 import kotlin.math.roundToInt
 
-class WeatherViewModel : ViewModel() {
+import android.app.Application
+import androidx.lifecycle.AndroidViewModel
+import androidlead.weatherappui.data.local.WeatherDatabase
+import androidlead.weatherappui.data.repository.WeatherRepository
+
+class WeatherViewModel(application: Application) : AndroidViewModel(application) {
     private val _weatherState = MutableStateFlow(WeatherUiState())
     val weatherState: StateFlow<WeatherUiState> = _weatherState.asStateFlow()
 
     // OpenWeather API Key
     private val apiKey = "94656f8ac592f27c36b009927eba16de"
+    
+    private val repository: WeatherRepository
+    
+    init {
+        val database = WeatherDatabase.getDatabase(application)
+        repository = WeatherRepository(database.weatherDao())
+    }
     
     private var searchJob: Job? = null
 
@@ -40,8 +52,11 @@ class WeatherViewModel : ViewModel() {
         viewModelScope.launch {
             _weatherState.update { it.copy(isLoading = true, error = null, searchSuggestions = emptyList()) }
             
+            delay(1000) // Artificial delay for UX
+            
             try {
-                val response = RetrofitClient.instance.getForecast(city, apiKey)
+                // Use repository instead of direct Retrofit call
+                val response = repository.getWeather(city, apiKey)
                 updateStateWithResponse(response)
             } catch (e: HttpException) {
                 handleError(e)
@@ -54,9 +69,12 @@ class WeatherViewModel : ViewModel() {
     fun fetchWeatherByLocation(lat: Double, lon: Double) {
         viewModelScope.launch {
             _weatherState.update { it.copy(isLoading = true, error = null, searchSuggestions = emptyList()) }
+            
+            delay(1000) // Artificial delay for UX
 
             try {
-                val response = RetrofitClient.instance.getForecastByCoordinates(lat, lon, apiKey)
+                // Use repository
+                val response = repository.getWeatherByLocation(lat, lon, apiKey)
                 updateStateWithResponse(response)
             } catch (e: HttpException) {
                 handleError(e)
@@ -76,7 +94,8 @@ class WeatherViewModel : ViewModel() {
         searchJob = viewModelScope.launch {
             delay(500) // Debounce
             try {
-                val suggestions = RetrofitClient.instance.searchCities(query, apiKey = apiKey)
+                // Use repository
+                val suggestions = repository.searchCities(query, apiKey = apiKey)
                 _weatherState.update { it.copy(searchSuggestions = suggestions) }
             } catch (e: Exception) {
                 // Ignore search errors for now or log them

@@ -22,6 +22,7 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
@@ -37,6 +38,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
@@ -46,6 +48,7 @@ import androidx.compose.material3.Divider
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Icon
 import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.OutlinedTextField
@@ -73,6 +76,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.material3.pulltorefresh.PullToRefreshContainer
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
+import androidx.compose.ui.draw.clip
+import com.google.firebase.auth.FirebaseUser
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -80,12 +88,15 @@ import java.util.Locale
 
 @Composable
 fun WeatherScreen(
-    viewModel: WeatherViewModel = viewModel()
+    user: FirebaseUser,
+    viewModel: WeatherViewModel = viewModel(),
+    onLogout: () -> Unit
 ) {
     val weatherState by viewModel.weatherState.collectAsState()
     var showApiErrorDialog by remember { mutableStateOf(false) }
     var isFahrenheit by remember { mutableStateOf(false) }
     var isAboutExpanded by remember { mutableStateOf(false) }
+    var showProfileDialog by remember { mutableStateOf(false) }
     
     // Search state
     var isSearching by remember { mutableStateOf(false) }
@@ -138,7 +149,7 @@ fun WeatherScreen(
                 drawerShape = RoundedCornerShape(topEnd = 24.dp, bottomEnd = 24.dp),
                 drawerContainerColor = Color.Transparent,
                 drawerContentColor = ColorTextSecondary,
-                modifier = Modifier.width(300.dp)
+                modifier = Modifier.width(320.dp)
             ) {
                 Box(
                     modifier = Modifier
@@ -158,63 +169,100 @@ fun WeatherScreen(
                             .fillMaxSize()
                             .padding(24.dp)
                     ) {
-                        Text(
-                            text = "Weather Forecast",
-                            style = MaterialTheme.typography.headlineMedium,
-                            color = ColorTextSecondary,
-                            fontWeight = FontWeight.Bold
-                        )
+                        // Header
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Image(
+                                painter = painterResource(id = R.drawable.ic_frosty),
+                                contentDescription = "App Icon",
+                                modifier = Modifier
+                                    .size(64.dp)
+                                    .background(Color.White.copy(alpha = 0.2f), RoundedCornerShape(16.dp))
+                                    .padding(8.dp)
+                            )
+                            Spacer(modifier = Modifier.width(16.dp))
+                            Column {
+                                Text(
+                                    text = "Weather App",
+                                    style = MaterialTheme.typography.titleLarge,
+                                    color = ColorTextSecondary,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    text = "Forecast & Quality",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = ColorTextSecondary.copy(alpha = 0.7f)
+                                )
+                            }
+                        }
+                        
                         Spacer(modifier = Modifier.height(32.dp))
                         Divider(color = ColorTextSecondary.copy(alpha = 0.2f))
                         Spacer(modifier = Modifier.height(24.dp))
 
+                        // Menu Items
+                        Text(
+                            text = "Settings",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = ColorTextSecondary.copy(alpha = 0.6f),
+                            modifier = Modifier.padding(bottom = 16.dp)
+                        )
+
                         // Unit Toggle Item
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable {
-                                    isFahrenheit = !isFahrenheit
-                                    scope.launch { drawerState.close() }
-                                }
-                                .padding(vertical = 12.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = if (isFahrenheit) "Switch to Celsius (°C)" else "Switch to Fahrenheit (°F)",
-                                style = MaterialTheme.typography.titleMedium,
-                                color = ColorTextSecondary
-                            )
-                        }
+                        DrawerItem(
+                            icon = if (isFahrenheit) R.drawable.img_sun else R.drawable.ic_frosty, // Using existing icons as placeholder
+                            text = if (isFahrenheit) "Celsius (°C)" else "Fahrenheit (°F)",
+                            subText = "Tap to switch unit",
+                            onClick = {
+                                isFahrenheit = !isFahrenheit
+                                scope.launch { drawerState.close() }
+                            }
+                        )
                         
-                        Spacer(modifier = Modifier.height(12.dp))
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Divider(color = ColorTextSecondary.copy(alpha = 0.1f))
+                        Spacer(modifier = Modifier.height(16.dp))
                         
-                        // About Item (Expandable)
-                        Column(modifier = Modifier.fillMaxWidth()) {
-                            Row(
+                        Text(
+                            text = "Info",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = ColorTextSecondary.copy(alpha = 0.6f),
+                            modifier = Modifier.padding(bottom = 16.dp)
+                        )
+
+                        // About Item
+                        DrawerItem(
+                            icon = R.drawable.ic_uv_index, // Using placeholder icon
+                            text = "About",
+                            subText = "Version 1.0",
+                            onClick = { isAboutExpanded = !isAboutExpanded }
+                        )
+
+                        if (isAboutExpanded) {
+                            Box(
                                 modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable {
-                                        isAboutExpanded = !isAboutExpanded
-                                    }
-                                    .padding(vertical = 12.dp),
-                                verticalAlignment = Alignment.CenterVertically
+                                    .padding(start = 16.dp, top = 8.dp)
+                                    .background(Color.White.copy(alpha = 0.1f), RoundedCornerShape(8.dp))
+                                    .padding(12.dp)
                             ) {
                                 Text(
-                                    text = "About App",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    color = ColorTextSecondary
-                                )
-                            }
-                            
-                            if (isAboutExpanded) {
-                                Text(
-                                    text = "Weather App v1.0\nBuilt with Jetpack Compose\nDesigned and developed by Muhammad Aliyan",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = ColorTextSecondary.copy(alpha = 0.8f),
-                                    modifier = Modifier.padding(start = 16.dp, bottom = 12.dp)
+                                    text = "Built with Jetpack Compose by Muhammad Aliyan",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = ColorTextSecondary.copy(alpha = 0.8f)
                                 )
                             }
                         }
+                        
+                        Spacer(modifier = Modifier.weight(1f))
+                        
+                        Text(
+                            text = "© 2025 WeatherApp",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = ColorTextSecondary.copy(alpha = 0.4f),
+                            modifier = Modifier.align(Alignment.CenterHorizontally)
+                        )
                     }
                 }
             }
@@ -228,11 +276,15 @@ fun WeatherScreen(
                 // Main Content always visible if we have data
                 if (weatherState.weatherData != null) {
                     WeatherContent(
+                        user = user,
                         weatherViewModel = viewModel,
                         weatherData = weatherState.weatherData!!,
                         forecastItems = weatherState.forecastItems,
                         airQualityItems = weatherState.airQualityItems,
+                        isLoading = weatherState.isLoading,
                         onLocationClick = { isSearching = true },
+                        onProfileClick = { showProfileDialog = true },
+                        onLogout = onLogout,
                         onRefresh = {
                             viewModel.fetchWeather(weatherState.weatherData!!.city.name)
                         },
@@ -314,8 +366,8 @@ fun WeatherScreen(
                     }
                 }
 
-                // Loading Indicator (Overlay)
-                if (weatherState.isLoading) {
+                // Loading Indicator (Overlay) - Only show if we don't have data yet
+                if (weatherState.isLoading && weatherState.weatherData == null) {
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
@@ -349,8 +401,103 @@ fun WeatherScreen(
                         }
                     }
                 }
+                
+                if (showProfileDialog) {
+                     ProfileDialog(
+                         user = user,
+                         onDismiss = { showProfileDialog = false },
+                         onLogout = {
+                             showProfileDialog = false
+                             onLogout()
+                         }
+                     )
+                }
             }
         }
+    }
+}
+
+@Composable
+fun ProfileDialog(user: FirebaseUser, onDismiss: () -> Unit, onLogout: () -> Unit) {
+    Dialog(onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(ColorSurface, RoundedCornerShape(24.dp))
+                .padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Image(
+                painter = painterResource(id = R.drawable.img_profile),
+                contentDescription = null,
+                modifier = Modifier
+                    .size(80.dp)
+                    .clip(CircleShape)
+                    .border(2.dp, ColorGradient2, CircleShape)
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+            Text(
+                text = user.email ?: "No Email",
+                style = MaterialTheme.typography.titleLarge,
+                color = ColorTextPrimary,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(modifier = Modifier.height(32.dp))
+            
+
+            Divider(color = ColorTextSecondary.copy(alpha = 0.1f))
+            Spacer(modifier = Modifier.height(24.dp))
+            
+            Button(
+                onClick = onLogout,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color.Red.copy(alpha = 0.1f),
+                    contentColor = Color.Red
+                ),
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                elevation = ButtonDefaults.buttonElevation(0.dp)
+            ) {
+                Text("Logout")
+            }
+        }
+    }
+}
+
+@Composable
+fun ProfileOptionItem(icon: Int, text: String, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .size(40.dp)
+                .background(ColorGradient1.copy(alpha = 0.1f), CircleShape),
+            contentAlignment = Alignment.Center
+        ) {
+             Image(
+                painter = painterResource(id = icon),
+                contentDescription = null,
+                modifier = Modifier.size(20.dp)
+            )
+        }
+        Spacer(modifier = Modifier.width(16.dp))
+        Text(
+            text = text,
+            style = MaterialTheme.typography.titleMedium,
+            color = ColorTextPrimary,
+            modifier = Modifier.weight(1f)
+        )
+        Icon(
+            painter = painterResource(id = R.drawable.ic_control), // Re-using existing icon or use proper arrow
+            contentDescription = null,
+            tint = ColorTextSecondary.copy(alpha = 0.4f),
+            modifier = Modifier.size(16.dp).rotate(-90f)
+        )
     }
 }
 
@@ -374,13 +521,18 @@ fun CustomFrostyLoader(modifier: Modifier = Modifier) {
     )
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun WeatherContent(
+    user: FirebaseUser,
     weatherViewModel: WeatherViewModel,
     weatherData: WeatherResponse,
     forecastItems: List<ForecastItem>,
     airQualityItems: List<AirQualityItem>,
+    isLoading: Boolean,
     onLocationClick: () -> Unit,
+    onProfileClick: () -> Unit,
+    onLogout: () -> Unit,
     onRefresh: () -> Unit,
     onSettingsClick: () -> Unit,
     isFahrenheit: Boolean,
@@ -390,71 +542,99 @@ fun WeatherContent(
     onSearch: (String) -> Unit,
     onCancelSearch: () -> Unit
 ) {
-    Column(
+    val pullRefreshState = rememberPullToRefreshState()
+
+    if (pullRefreshState.isRefreshing) {
+        LaunchedEffect(true) {
+            onRefresh()
+        }
+    }
+
+    LaunchedEffect(isLoading) {
+        if (!isLoading) {
+            pullRefreshState.endRefresh()
+        }
+    }
+
+    Box(
         modifier = Modifier
             .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 24.dp, vertical = 10.dp)
+            .nestedScroll(pullRefreshState.nestedScrollConnection)
     ) {
-        val current = weatherData.list.firstOrNull()
-        // Temperature Conversion
-        val rawTemp = current?.main?.temp ?: 0.0
-        val rawFeelsLike = current?.main?.feelsLike ?: 0.0
-        
-        val displayTemp = if (isFahrenheit) (rawTemp * 9/5) + 32 else rawTemp
-        val displayFeelsLike = if (isFahrenheit) (rawFeelsLike * 9/5) + 32 else rawFeelsLike
-        
-        val tempStr = displayTemp.toInt().toString()
-        val feelsLikeStr = displayFeelsLike.toInt().toString()
-        val unit = if (isFahrenheit) "°F" else "°C"
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 24.dp, vertical = 10.dp)
+        ) {
+            val current = weatherData.list.firstOrNull()
+            // Temperature Conversion
+            val rawTemp = current?.main?.temp ?: 0.0
+            val rawFeelsLike = current?.main?.feelsLike ?: 0.0
+            
+            val displayTemp = if (isFahrenheit) (rawTemp * 9/5) + 32 else rawTemp
+            val displayFeelsLike = if (isFahrenheit) (rawFeelsLike * 9/5) + 32 else rawFeelsLike
+            
+            val tempStr = displayTemp.toInt().toString()
+            val feelsLikeStr = displayFeelsLike.toInt().toString()
+            val unit = if (isFahrenheit) "°F" else "°C"
 
-        val condition = current?.weather?.firstOrNull()?.main ?: ""
-        val icon = current?.weather?.firstOrNull()?.icon ?: ""
+            val condition = current?.weather?.firstOrNull()?.main ?: ""
+            val icon = current?.weather?.firstOrNull()?.icon ?: ""
 
-        val timestamp = current?.dt ?: System.currentTimeMillis() / 1000
-        val formattedDate = remember(timestamp) {
-            SimpleDateFormat("EEE, MMM d", Locale.getDefault()).format(Date(timestamp * 1000))
+            val timestamp = current?.dt ?: System.currentTimeMillis() / 1000
+            val formattedDate = remember(timestamp) {
+                SimpleDateFormat("EEE, MMM d", Locale.getDefault()).format(Date(timestamp * 1000))
+            }
+
+            ActionBar(
+                location = weatherData.city.name,
+                updatedText = formattedDate,
+                onLocationClick = onLocationClick,
+                onSettingsClick = onSettingsClick,
+                onProfileClick = onProfileClick,
+                isSearching = isSearching,
+                searchText = searchText,
+                onSearchTextChange = onSearchTextChange,
+                onSearch = onSearch,
+                onCancelSearch = onCancelSearch
+            )
+            Spacer(
+                modifier = Modifier.height(12.dp)
+            )
+            DailyForecast(
+                forecast = condition,
+                date = "Today",
+                temperature = tempStr,
+                feelsLike = "Feels like $feelsLikeStr$unit",
+                iconRes = weatherViewModel.mapIconToDrawable(icon)
+            )
+            Spacer(
+                modifier = Modifier.height(24.dp)
+            )
+            AirQuality(
+                data = airQualityItems,
+                onRefresh = onRefresh
+            )
+            Spacer(
+                modifier = Modifier.height(24.dp)
+            )
+            
+            val convertedForecast = forecastItems.map { item ->
+                val t = item.temperature.replace("°", "").toIntOrNull() ?: 0
+                val newT = if (isFahrenheit) (t * 9/5) + 32 else t
+                item.copy(temperature = "$newT°")
+            }
+            
+            WeeklyForecast(data = convertedForecast)
         }
-
-        ActionBar(
-            location = weatherData.city.name,
-            updatedText = formattedDate,
-            onLocationClick = onLocationClick,
-            onSettingsClick = onSettingsClick,
-            isSearching = isSearching,
-            searchText = searchText,
-            onSearchTextChange = onSearchTextChange,
-            onSearch = onSearch,
-            onCancelSearch = onCancelSearch
-        )
-        Spacer(
-            modifier = Modifier.height(12.dp)
-        )
-        DailyForecast(
-            forecast = condition,
-            date = "Today",
-            temperature = tempStr,
-            feelsLike = "Feels like $feelsLikeStr$unit",
-            iconRes = weatherViewModel.mapIconToDrawable(icon)
-        )
-        Spacer(
-            modifier = Modifier.height(24.dp)
-        )
-        AirQuality(
-            data = airQualityItems,
-            onRefresh = onRefresh
-        )
-        Spacer(
-            modifier = Modifier.height(24.dp)
-        )
         
-        val convertedForecast = forecastItems.map { item ->
-            val t = item.temperature.replace("°", "").toIntOrNull() ?: 0
-            val newT = if (isFahrenheit) (t * 9/5) + 32 else t
-            item.copy(temperature = "$newT°")
+        if (pullRefreshState.isRefreshing || pullRefreshState.progress > 0) {
+            PullToRefreshContainer(
+                state = pullRefreshState,
+                modifier = Modifier.align(Alignment.TopCenter)
+            )
         }
-        
-        WeeklyForecast(data = convertedForecast)
     }
 }
 
@@ -506,6 +686,41 @@ fun CitySelectionDialog(
             ) {
                 Text("Search")
             }
+        }
+    }
+}
+
+@Composable
+fun DrawerItem(
+    icon: Int,
+    text: String,
+    subText: String,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Image(
+            painter = painterResource(id = icon),
+            contentDescription = null,
+            modifier = Modifier.size(24.dp)
+        )
+        Spacer(modifier = Modifier.width(16.dp))
+        Column {
+            Text(
+                text = text,
+                style = MaterialTheme.typography.titleMedium,
+                color = ColorTextSecondary
+            )
+            Text(
+                text = subText,
+                style = MaterialTheme.typography.bodySmall,
+                color = ColorTextSecondary.copy(alpha = 0.5f)
+            )
         }
     }
 }
